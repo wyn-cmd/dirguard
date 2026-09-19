@@ -99,7 +99,8 @@ def run_verify(args):
         print(f"Not a directory: {args.path}", file=sys.stderr)
         return 2
 
-    saved, error = read_manifest(args.manifest)
+    # The manifest body is not used here, verify_directory reads it again.
+    _, error = read_manifest(args.manifest)
     if error:
         print(error, file=sys.stderr)
         return 2
