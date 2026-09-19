@@ -81,8 +81,12 @@ def run_generate(args):
         patterns=patterns,
         follow_symlinks=args.follow_symlinks,
     )
-    with open(args.out, "w", encoding="utf-8") as handle:
+    # Write beside the target and swap it in, so an interrupted scan cannot
+    # leave a half written manifest that later verifies as corrupt.
+    temp_out = args.out + ".tmp"
+    with open(temp_out, "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2, sort_keys=True)
+    os.replace(temp_out, args.out)
     print(f"Wrote {manifest['file_count']} entries to {args.out}")
 
     for entry in manifest["errors"]:
