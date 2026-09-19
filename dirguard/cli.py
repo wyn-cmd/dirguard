@@ -18,6 +18,7 @@ def build_parser():
         prog="dirguard",
         description="Generate and verify directory integrity manifests.",
     )
+    parser.add_argument("--version", action="version", version="dirguard 0.1.0")
     subparsers = parser.add_subparsers(dest="command")
 
     generate = subparsers.add_parser("generate", help="Generate an integrity manifest for a directory.")
