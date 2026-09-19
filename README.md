@@ -97,6 +97,8 @@ __pycache__
 
 Either a bare name like `node_modules` or a trailing slash form like `node_modules/` works, and a bare name prunes the directory so nothing under it is scanned at all.
 
+Verification also reads a `.dirguardignore` sitting next to the manifest, if there is one, so a tree can keep its rules in one file instead of repeating `--ignore-file` on every command.
+
 ## Exit codes
 
 | Code | Meaning |
