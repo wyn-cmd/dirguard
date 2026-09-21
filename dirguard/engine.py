@@ -53,6 +53,8 @@ def load_ignore_patterns(patterns=None, ignore_file=None):
 def is_ignored(rel_path, patterns):
     # Matches the relative path, the path without a trailing slash, and the bare
     # name, so "*.log" works anywhere and "build" prunes a directory called build.
+    if not patterns:
+        return False
     trimmed = rel_path.rstrip("/")
     candidates = {rel_path, trimmed}
     base = os.path.basename(trimmed)
