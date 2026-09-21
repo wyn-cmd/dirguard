@@ -269,8 +269,11 @@ def diff_manifests(old_manifest_path, new_manifest_path):
     old_files = old.get("files", {})
     new_files = new.get("files", {})
     changed = sorted(
-        rel_path for rel_path, entry in old_files.items()
-        if rel_path in new_files and entry.get("hash") != new_files[rel_path].get("hash")
+        rel_path for rel_path, old_entry in old_files.items()
+        if rel_path in new_files and (
+            old_entry.get("hash") != new_files[rel_path].get("hash") or
+            old_entry.get("target") != new_files[rel_path].get("target")
+        )
     )
     added = sorted(set(new_files) - set(old_files))
     removed = sorted(set(old_files) - set(new_files))

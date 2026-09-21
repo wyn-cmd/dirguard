@@ -274,6 +274,35 @@ def test_diff_exit_codes():
         check("diff report has no scan_errors key requirement", "Integrity OK" not in format_report(report), report)
 
 
+def test_diff_reports_retargeted_link():
+    # A link carries no hash, so the diff has to compare the recorded target instead.
+    # Hand-written manifests keep this test runnable where symlinks need privileges.
+    with tempfile.TemporaryDirectory() as tmp:
+        old = os.path.join(tmp, "old.json")
+        new = os.path.join(tmp, "new.json")
+        entry = {"type": "symlink", "target": os.path.join(tmp, "one.txt")}
+        moved = {"type": "symlink", "target": os.path.join(tmp, "two.txt")}
+        files = {"link.txt": entry, "a.txt": {"type": "file", "hash": "h"}}
+        with open(old, "w") as handle:
+            json.dump({"files": files}, handle)
+
+        retargeted = {"link.txt": moved, "a.txt": {"type": "file", "hash": "h"}}
+        with open(new, "w") as handle:
+            json.dump({"files": retargeted}, handle)
+        report = diff_manifests(old, new)
+        check("retargeted link is reported as changed", report["changed"] == ["link.txt"], report)
+        check(
+            "retargeted link is not also counted as added or removed",
+            not report["added"] and not report["removed"],
+            report,
+        )
+
+        with open(new, "w") as handle:
+            json.dump({"files": files}, handle)
+        report = diff_manifests(old, new)
+        check("link with an unchanged target stays clean", report["changed"] == [] and report["clean"], report)
+
+
 def test_many_files_performance():
     with tempfile.TemporaryDirectory() as tmp:
         tree = os.path.join(tmp, "tree")
