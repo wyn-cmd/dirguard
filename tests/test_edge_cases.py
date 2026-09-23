@@ -1,6 +1,5 @@
 import json
 import os
-import stat
 import subprocess
 import sys
 import tempfile
@@ -36,7 +35,7 @@ def test_empty_directory():
         manifest = scan_directory(tree)
         check("empty dir has zero files", manifest["file_count"] == 0)
         mpath = os.path.join(tmp, "m.json")
-        with open(mpath, "w") as handle:
+        with open(mpath, "w", encoding="utf-8") as handle:
             json.dump(manifest, handle)
         report = verify_directory(tree, mpath)
         check("empty dir verifies clean", report["clean"], report)
@@ -46,11 +45,11 @@ def test_empty_file_and_duplicates():
     with tempfile.TemporaryDirectory() as tmp:
         tree = os.path.join(tmp, "tree")
         os.makedirs(tree)
-        open(os.path.join(tree, "empty_a"), "w").close()
-        open(os.path.join(tree, "empty_b"), "w").close()
-        with open(os.path.join(tree, "same1"), "w") as handle:
+        open(os.path.join(tree, "empty_a"), "w", encoding="utf-8").close()
+        open(os.path.join(tree, "empty_b"), "w", encoding="utf-8").close()
+        with open(os.path.join(tree, "same1"), "w", encoding="utf-8") as handle:
             handle.write("identical")
-        with open(os.path.join(tree, "same2"), "w") as handle:
+        with open(os.path.join(tree, "same2"), "w", encoding="utf-8") as handle:
             handle.write("identical")
         manifest = scan_directory(tree)
         hashes = {k: v["hash"] for k, v in manifest["files"].items()}
@@ -65,7 +64,7 @@ def test_unicode_and_space_filenames():
         os.makedirs(os.path.join(tree, "d ir"))
         names = ["日本語.txt", "with space.txt", "emoji-\U0001F43A.txt", "quote'\".txt"]
         for name in names:
-            with open(os.path.join(tree, "d ir", name), "w") as handle:
+            with open(os.path.join(tree, "d ir", name), "w", encoding="utf-8") as handle:
                 handle.write(name)
         manifest = scan_directory(tree)
         check("unicode names recorded", manifest["file_count"] == len(names), sorted(manifest["files"]))
@@ -77,16 +76,15 @@ def test_unicode_and_space_filenames():
 
 
 def test_directory_name_ignore():
-    # A plain directory name in the ignore list should skip that directory.
     with tempfile.TemporaryDirectory() as tmp:
         tree = os.path.join(tmp, "tree")
         os.makedirs(os.path.join(tree, "node_modules", "inner"))
         os.makedirs(os.path.join(tree, "src"))
-        with open(os.path.join(tree, "node_modules", "pkg.js"), "w") as handle:
+        with open(os.path.join(tree, "node_modules", "pkg.js"), "w", encoding="utf-8") as handle:
             handle.write("dep")
-        with open(os.path.join(tree, "node_modules", "inner", "deep.js"), "w") as handle:
+        with open(os.path.join(tree, "node_modules", "inner", "deep.js"), "w", encoding="utf-8") as handle:
             handle.write("dep")
-        with open(os.path.join(tree, "src", "app.js"), "w") as handle:
+        with open(os.path.join(tree, "src", "app.js"), "w", encoding="utf-8") as handle:
             handle.write("app")
         manifest = scan_directory(tree, patterns=["node_modules"])
         check(
@@ -108,7 +106,7 @@ def test_is_ignored_matching():
 def test_ignore_file_parsing():
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "ignore")
-        with open(path, "w") as handle:
+        with open(path, "w", encoding="utf-8") as handle:
             handle.write("# comment\n\n*.tmp\n  *.bak  \n")
         patterns = load_ignore_patterns(["extra"], path)
         check("ignore file comments skipped", "# comment" not in patterns, patterns)
@@ -126,7 +124,7 @@ def test_broken_symlink():
         entry = manifest["files"]["dangling"]
         check("broken symlink recorded as symlink", entry.get("type") == "symlink", entry)
         mpath = os.path.join(tmp, "m.json")
-        with open(mpath, "w") as handle:
+        with open(mpath, "w", encoding="utf-8") as handle:
             json.dump(manifest, handle)
         report = verify_directory(tree, mpath)
         check("broken symlink verifies clean", report["clean"], report)
@@ -147,7 +145,7 @@ def test_unreadable_file():
         tree = os.path.join(tmp, "tree")
         os.makedirs(tree)
         secret = os.path.join(tree, "secret.txt")
-        with open(secret, "w") as handle:
+        with open(secret, "w", encoding="utf-8") as handle:
             handle.write("classified")
         os.chmod(secret, 0)
         try:
@@ -163,14 +161,14 @@ def test_unreadable_directory():
         tree = os.path.join(tmp, "tree")
         locked = os.path.join(tree, "locked")
         os.makedirs(locked)
-        with open(os.path.join(locked, "hidden.txt"), "w") as handle:
+        with open(os.path.join(locked, "hidden.txt"), "w", encoding="utf-8") as handle:
             handle.write("hidden")
         os.chmod(locked, 0)
         try:
             manifest = scan_directory(tree)
             check(
                 "unreadable directory is reported",
-                manifest.get("errors"),
+                bool(manifest.get("errors")),
                 manifest.get("errors"),
             )
         finally:
@@ -181,11 +179,12 @@ def test_old_manifest_format():
     with tempfile.TemporaryDirectory() as tmp:
         tree = os.path.join(tmp, "tree")
         os.makedirs(tree)
-        with open(os.path.join(tree, "a.txt"), "w") as handle:
+        a_path = os.path.join(tree, "a.txt")
+        with open(a_path, "w", encoding="utf-8") as handle:
             handle.write("a")
-        legacy = {"files": {"a.txt": {"type": "file", "size": 1, "mtime": 0.0, "hash": hash_file(os.path.join(tree, "a.txt"))}}}
+        legacy = {"files": {"a.txt": {"type": "file", "size": 1, "mtime": 0.0, "hash": hash_file(a_path)}}}
         mpath = os.path.join(tmp, "legacy.json")
-        with open(mpath, "w") as handle:
+        with open(mpath, "w", encoding="utf-8") as handle:
             json.dump(legacy, handle)
         report = verify_directory(tree, mpath)
         check("legacy manifest without metadata keys works", report["clean"], report)
@@ -194,17 +193,17 @@ def test_old_manifest_format():
 def test_type_swap():
     with tempfile.TemporaryDirectory() as tmp:
         tree = os.path.join(tmp, "tree")
-        os.makedirs(os.path.join(tree, "thing"))
-        with open(os.path.join(tree, "thing", "inner.txt"), "w") as handle:
+        thing_dir = os.path.join(tree, "thing")
+        os.makedirs(thing_dir)
+        with open(os.path.join(thing_dir, "inner.txt"), "w", encoding="utf-8") as handle:
             handle.write("inner")
         mpath = os.path.join(tmp, "m.json")
-        with open(mpath, "w") as handle:
+        with open(mpath, "w", encoding="utf-8") as handle:
             json.dump(scan_directory(tree), handle)
 
-        # Replace the directory with a file of the same name.
-        os.remove(os.path.join(tree, "thing", "inner.txt"))
-        os.rmdir(os.path.join(tree, "thing"))
-        with open(os.path.join(tree, "thing"), "w") as handle:
+        os.remove(os.path.join(thing_dir, "inner.txt"))
+        os.rmdir(thing_dir)
+        with open(thing_dir, "w", encoding="utf-8") as handle:
             handle.write("now a file")
 
         report = verify_directory(tree, mpath)
@@ -215,13 +214,14 @@ def test_diff_identical_and_missing():
     with tempfile.TemporaryDirectory() as tmp:
         tree = os.path.join(tmp, "tree")
         os.makedirs(tree)
-        with open(os.path.join(tree, "a.txt"), "w") as handle:
+        with open(os.path.join(tree, "a.txt"), "w", encoding="utf-8") as handle:
             handle.write("a")
         p1 = os.path.join(tmp, "one.json")
         p2 = os.path.join(tmp, "two.json")
+        manifest_data = scan_directory(tree)
         for path in (p1, p2):
-            with open(path, "w") as handle:
-                json.dump(scan_directory(tree), handle)
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest_data, handle)
         report = diff_manifests(p1, p2)
         check("identical manifests diff clean", report["clean"], report)
         check("diff report renders clean line", "Integrity OK" in format_report(report))
@@ -246,7 +246,7 @@ def test_relative_and_absolute_paths_agree():
     with tempfile.TemporaryDirectory() as tmp:
         tree = os.path.join(tmp, "tree")
         os.makedirs(tree)
-        with open(os.path.join(tree, "a.txt"), "w") as handle:
+        with open(os.path.join(tree, "a.txt"), "w", encoding="utf-8") as handle:
             handle.write("a")
         cwd = os.getcwd()
         os.chdir(tmp)
@@ -264,19 +264,17 @@ def test_relative_and_absolute_paths_agree():
 
 
 def test_manifest_root_mismatch_is_visible():
-    # Verifying the wrong directory should never look like a clean result, even
-    # when the file contents happen to line up.
     with tempfile.TemporaryDirectory() as tmp:
         left = os.path.join(tmp, "left")
         right = os.path.join(tmp, "right")
         os.makedirs(left)
         os.makedirs(right)
-        with open(os.path.join(left, "a.txt"), "w") as handle:
+        with open(os.path.join(left, "a.txt"), "w", encoding="utf-8") as handle:
             handle.write("same")
-        with open(os.path.join(right, "a.txt"), "w") as handle:
+        with open(os.path.join(right, "a.txt"), "w", encoding="utf-8") as handle:
             handle.write("same")
         mpath = os.path.join(tmp, "m.json")
-        with open(mpath, "w") as handle:
+        with open(mpath, "w", encoding="utf-8") as handle:
             json.dump(scan_directory(left), handle)
 
         report = verify_directory(right, mpath)
@@ -285,15 +283,14 @@ def test_manifest_root_mismatch_is_visible():
         check("root mismatch is printed", "Warning" in format_report(report), format_report(report))
 
         os.remove(os.path.join(right, "a.txt"))
-        with open(os.path.join(right, "b.txt"), "w") as handle:
+        with open(os.path.join(right, "b.txt"), "w", encoding="utf-8") as handle:
             handle.write("different")
         report = verify_directory(right, mpath)
         check("wrong directory with different files is not clean", not report["clean"], report)
 
-        # A manifest without a recorded root still works.
         legacy = {"files": {"a.txt": {"type": "file", "size": 1, "mtime": 0.0, "hash": "x"}}}
         lpath = os.path.join(tmp, "legacy.json")
-        with open(lpath, "w") as handle:
+        with open(lpath, "w", encoding="utf-8") as handle:
             json.dump(legacy, handle)
         report = verify_directory(left, lpath)
         check("manifest without root has no mismatch warning", "root_mismatch" not in report, report)
@@ -324,12 +321,12 @@ def test_cli_surface():
     with tempfile.TemporaryDirectory() as tmp:
         tree = os.path.join(tmp, "tree")
         os.makedirs(tree)
-        with open(os.path.join(tree, "a.txt"), "w") as handle:
+        with open(os.path.join(tree, "a.txt"), "w", encoding="utf-8") as handle:
             handle.write("a")
         mpath = os.path.join(tmp, "m.json")
         code, out, err = run(["generate", tree, "--out", mpath, "--algorithm", "sha1"])
         check("generate sha1 exits 0", code == 0, (code, out, err))
-        with open(mpath) as handle:
+        with open(mpath, encoding="utf-8") as handle:
             check("manifest records algorithm", json.load(handle)["algorithm"] == "sha1")
         code, out, err = run(["verify", tree, "--manifest", mpath])
         check("verify clean exits 0", code == 0, (code, out, err))
