@@ -7,6 +7,7 @@ import time
 
 SUPPORTED_ALGORITHMS = ("sha256", "sha1", "md5", "blake2b")
 CHUNK_SIZE = 65536
+MANIFEST_VERSION = 1
 
 # Node types that are not regular files and must never be opened for hashing.
 # Reading a FIFO blocks until a writer shows up, and character devices can
@@ -67,10 +68,25 @@ def is_ignored(rel_path, patterns):
     return False
 
 
-def scan_directory(root_dir, algorithm="sha256", patterns=None, follow_symlinks=False):
+def scan_directory(root_dir, algorithm="sha256", patterns=None, follow_symlinks=False, baseline=None):
     # Walks the tree and returns an entry per node with size, mtime and digest.
+    #
+    # baseline is an older manifest (the whole dict, not just its files) used
+    # to skip rehashing. When a file's size and mtime exactly match its
+    # baseline entry the old hash is reused instead of recomputed: on a tree
+    # of any real size this is where nearly all the time goes. A baseline
+    # written with a different algorithm is ignored outright, since its
+    # hashes are not comparable to the ones being produced now. This is a
+    # performance shortcut for generating a fresh manifest from a trusted
+    # baseline, not a security check: verify_directory never passes one and
+    # always hashes every file, because trusting mtime during verification
+    # would let a tampered file with a forged mtime slip through undetected.
     patterns = patterns or []
+    baseline_files = {}
+    if baseline and baseline.get("algorithm") == algorithm:
+        baseline_files = baseline.get("files", {})
     manifest = {
+        "version": MANIFEST_VERSION,
         "algorithm": algorithm,
         "root": os.path.abspath(root_dir),
         "scanned_at": time.time(),
@@ -78,6 +94,7 @@ def scan_directory(root_dir, algorithm="sha256", patterns=None, follow_symlinks=
         "files": {},
         "errors": [],
     }
+    reused = 0
 
     def record_walk_error(err):
         # os.walk swallows these by default, which would hide locked directories.
@@ -160,6 +177,23 @@ def scan_directory(root_dir, algorithm="sha256", patterns=None, follow_symlinks=
                 }
                 continue
 
+            baseline_entry = baseline_files.get(rel_path)
+            if (
+                baseline_entry is not None
+                and baseline_entry.get("type") == "file"
+                and baseline_entry.get("size") == stat_result.st_size
+                and baseline_entry.get("mtime") == stat_result.st_mtime
+                and baseline_entry.get("hash")
+            ):
+                manifest["files"][rel_path] = {
+                    "type": "file",
+                    "size": stat_result.st_size,
+                    "mtime": stat_result.st_mtime,
+                    "hash": baseline_entry["hash"],
+                }
+                reused += 1
+                continue
+
             try:
                 manifest["files"][rel_path] = {
                     "type": "file",
@@ -171,6 +205,7 @@ def scan_directory(root_dir, algorithm="sha256", patterns=None, follow_symlinks=
                 manifest["files"][rel_path] = {"type": "unreadable", "error": str(err)}
 
     manifest["file_count"] = len(manifest["files"])
+    manifest["reused_hashes"] = reused
     return manifest
 
 

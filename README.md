@@ -17,6 +17,8 @@ It is useful for detecting tampering in config folders, watching a project direc
 - Exit code 1 on any integrity failure, 2 for usage errors such as a missing path, a missing manifest or a manifest that is not valid JSON.
 - JSON output for the verify and diff reports.
 - A manifest written inside the tree it describes is skipped automatically, so it does not show up as an added file on the next verification.
+- `update` regenerates a manifest and reuses hashes for files whose size and mtime have not changed, which is much faster than `generate` on a tree that only changed a little.
+- `--quiet` on `verify` and `diff` suppresses all output while keeping the same exit code, for scripts that only care whether the tree changed.
 
 ## Installation
 
@@ -31,6 +33,14 @@ Generate a manifest for a directory:
 ```bash
 dirguard generate /path/to/tree --out manifest.json
 ```
+
+Regenerate a manifest without rehashing files that have not changed, comparing size and mtime against the existing manifest (or `--baseline` if given):
+
+```bash
+dirguard update /path/to/tree --out manifest.json
+```
+
+This is a performance shortcut for keeping a manifest current on a tree that changes a little at a time, not a security check: it trusts size and mtime to decide what to skip, and a baseline written with a different `--algorithm` is ignored outright rather than mixed in. `verify` never takes this shortcut and always hashes every file, since trusting mtime during verification is exactly what would let a tampered file with a forged timestamp go unnoticed.
 
 Skip log files and follow symlink targets instead of recording links:
 
@@ -48,6 +58,12 @@ Machine readable verification output:
 
 ```bash
 dirguard verify /path/to/tree --json
+```
+
+Verify or diff with no output at all, relying only on the exit code, which is the same 0/1 signal either way:
+
+```bash
+dirguard verify /path/to/tree --quiet
 ```
 
 Compare two manifests without reading the filesystem:
@@ -117,6 +133,7 @@ tests/
   test_dirguard.py            core behaviour
   test_edge_cases.py          filesystem oddities
   test_edge_cases_round2.py   hangs, loops and error paths
+  test_update_and_quiet.py    incremental rehashing and quiet mode
 ```
 
 ## Tests
@@ -127,6 +144,7 @@ All three suites run with the standard interpreter and no extra dependencies:
 python3 tests/test_dirguard.py
 python3 tests/test_edge_cases.py
 python3 tests/test_edge_cases_round2.py
+python3 tests/test_update_and_quiet.py
 ```
 
 The edge case suites cover empty trees, unicode and space filenames, empty and duplicate files, broken symlinks, symlink loops, retargeted links, symlinked directories, FIFOs and sockets, unreadable files and directories, type swaps, legacy manifests, corrupt and missing manifests, a manifest written inside the tree, ignore files, real deletions next to newly ignored files, 2000 file trees, a 64MB file, and the command line surface.
