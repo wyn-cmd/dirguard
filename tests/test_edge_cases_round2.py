@@ -80,7 +80,7 @@ def test_socket_file_is_recorded():
 
 
 def test_symlink_loop_is_not_duplicated():
-    # With --follow-symlinks a link back to an ancestor must not walk the tree
+    # With follow_symlinks a link back to an ancestor must not walk the tree
     # again or the same files get recorded over and over.
     with tempfile.TemporaryDirectory() as tmp:
         tree = os.path.join(tmp, "tree")
@@ -329,7 +329,7 @@ def test_json_output_parses_with_awkward_names():
     with tempfile.TemporaryDirectory() as tmp:
         tree = os.path.join(tmp, "tree")
         os.makedirs(tree)
-        awkward = ['new\nline.txt', 'quote".txt', "tab\there.txt", "back\\slash.txt"]
+        awkward = ["new\nline.txt", 'quote".txt', "tab\there.txt", "back\\slash.txt"]
         for index, name in enumerate(awkward):
             with open(os.path.join(tree, name), "w") as handle:
                 handle.write(str(index))
