@@ -13,6 +13,16 @@ from dirguard.engine import (
 )
 
 
+def add_scan_options(subparser, default_out="manifest.json"):
+    # generate and update take the same five options, so they are declared once.
+    subparser.add_argument("path", help="Directory to scan.")
+    subparser.add_argument("--out", default=default_out, help="Where to write the manifest (default: manifest.json).")
+    subparser.add_argument("--algorithm", default="sha256", choices=SUPPORTED_ALGORITHMS, help="Hash algorithm to use.")
+    subparser.add_argument("--ignore", action="append", default=[], help="Glob pattern to skip, repeatable.")
+    subparser.add_argument("--ignore-file", default=None, help="File of glob patterns to skip, one per line.")
+    subparser.add_argument("--follow-symlinks", action="store_true", help="Hash the target of symlinks instead of recording the link.")
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="dirguard",
@@ -22,24 +32,15 @@ def build_parser():
     subparsers = parser.add_subparsers(dest="command")
 
     generate = subparsers.add_parser("generate", help="Generate an integrity manifest for a directory.")
-    generate.add_argument("path", help="Directory to scan.")
-    generate.add_argument("--out", default="manifest.json", help="Where to write the manifest (default: manifest.json).")
-    generate.add_argument("--algorithm", default="sha256", choices=SUPPORTED_ALGORITHMS, help="Hash algorithm to use.")
-    generate.add_argument("--ignore", action="append", default=[], help="Glob pattern to skip, repeatable.")
-    generate.add_argument("--ignore-file", default=None, help="File of glob patterns to skip, one per line.")
-    generate.add_argument("--follow-symlinks", action="store_true", help="Hash the target of symlinks instead of recording the link.")
+    add_scan_options(generate)
 
+    # update differs from generate only by the baseline option.
     update = subparsers.add_parser(
         "update",
         help="Regenerate a manifest, reusing old hashes for files whose size and mtime have not changed.",
     )
-    update.add_argument("path", help="Directory to scan.")
-    update.add_argument("--out", default="manifest.json", help="Where to write the manifest (default: manifest.json).")
+    add_scan_options(update)
     update.add_argument("--baseline", default=None, help="Manifest to reuse hashes from (default: same as --out).")
-    update.add_argument("--algorithm", default="sha256", choices=SUPPORTED_ALGORITHMS, help="Hash algorithm to use.")
-    update.add_argument("--ignore", action="append", default=[], help="Glob pattern to skip, repeatable.")
-    update.add_argument("--ignore-file", default=None, help="File of glob patterns to skip, one per line.")
-    update.add_argument("--follow-symlinks", action="store_true", help="Hash the target of symlinks instead of recording the link.")
 
     verify = subparsers.add_parser("verify", help="Verify a directory against a manifest.")
     verify.add_argument("path", help="Directory to scan.")
@@ -83,8 +84,7 @@ def run_update(args):
 
 def run_generate_or_update(args, reuse_baseline):
     if not os.path.isdir(args.path):
-        print(f"Not a directory: {args.path}", file=sys.stderr)
-        return 2
+        return report_error(f"Not a directory: {args.path}", quiet=False)
 
     patterns = load_ignore_patterns(args.ignore, args.ignore_file)
 
@@ -129,46 +129,45 @@ def run_generate_or_update(args, reuse_baseline):
     return 0
 
 
+def emit_report(args, report):
+    # verify and diff share one output contract: quiet prints nothing, json
+    # prints the report, anything else renders the plain text lines. The exit
+    # code is 1 on any dirty result so both can gate a script or CI job.
+    if not args.quiet:
+        if args.json:
+            print(json.dumps(report, indent=2, sort_keys=True))
+        else:
+            print(format_report(report))
+    return 0 if report["clean"] else 1
+
+
+def report_error(message, quiet):
+    # Quiet mode suppresses the message as well, but the exit code still tells
+    # the caller something went wrong.
+    if not quiet:
+        print(message, file=sys.stderr)
+    return 2
+
+
 def run_verify(args):
     if not os.path.isdir(args.path):
-        if not args.quiet:
-            print(f"Not a directory: {args.path}", file=sys.stderr)
-        return 2
+        return report_error(f"Not a directory: {args.path}", args.quiet)
 
     # The manifest body is not used here, verify_directory reads it again.
     _, error = read_manifest(args.manifest)
     if error:
-        if not args.quiet:
-            print(error, file=sys.stderr)
-        return 2
+        return report_error(error, args.quiet)
 
-    report = verify_directory(args.path, args.manifest)
-    if args.quiet:
-        pass
-    elif args.json:
-        print(json.dumps(report, indent=2, sort_keys=True))
-    else:
-        print(format_report(report))
-    # Exit code 1 signals tampering so this can gate a script or CI job.
-    return 0 if report["clean"] else 1
+    return emit_report(args, verify_directory(args.path, args.manifest))
 
 
 def run_diff(args):
     for path in (args.old, args.new):
         _, error = read_manifest(path)
         if error:
-            if not args.quiet:
-                print(error, file=sys.stderr)
-            return 2
+            return report_error(error, args.quiet)
 
-    report = diff_manifests(args.old, args.new)
-    if args.quiet:
-        pass
-    elif args.json:
-        print(json.dumps(report, indent=2, sort_keys=True))
-    else:
-        print(format_report(report))
-    return 0 if report["clean"] else 1
+    return emit_report(args, diff_manifests(args.old, args.new))
 
 
 def main(argv=None):
